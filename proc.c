@@ -532,3 +532,21 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+int
+getpname(int pid) 
+{
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->pid == pid) {
+      cprintf("%s\n", p->name);
+      release(&ptable.lock);
+      return 0;
+    }
+  }
+
+  release(&ptable.lock);
+  return -1;
+}
