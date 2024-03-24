@@ -123,6 +123,7 @@ void            yield(void);
 int             getpname(int);
 void            ps(int);
 int             getnice(int);
+int             setnice(int, int);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

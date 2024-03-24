@@ -593,6 +593,20 @@ getnice(int pid)
   return ret;
 }
 
+int
+setnice(int pid, int value)
+{
+  struct proc *p = find_proc_by_pid(pid);
+  if(!is_proc_alive(p)) return -1;
+
+  if(value < 0 || value > 39) return -1; // 0 <= nice <= 39
+  acquire(&ptable.lock);
+  p->nice = value;
+  release(&ptable.lock);
+
+  return 0;
+}
+
 
 
 /** helper function impls*/

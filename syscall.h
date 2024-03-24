@@ -23,3 +23,4 @@
 #define SYS_getpname 22
 #define SYS_ps 23
 #define SYS_getnice 24
+#define SYS_setnice 25

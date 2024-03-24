@@ -124,3 +124,17 @@ sys_getnice(void)
   
   return getnice(pid);
 }
+
+int
+sys_setnice(void)
+{
+  int pid;
+  int val;
+  
+  if(argint(0, &pid) < 0)
+    return -1;
+  if(argint(1, &val) < 0)
+    return -1;
+  
+  return setnice(pid, val);
+}
