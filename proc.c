@@ -87,6 +87,7 @@ allocproc(void)
 
 found:
   p->state = EMBRYO;
+  p->nice = 20;
   p->pid = nextpid++;
 
   release(&ptable.lock);
@@ -149,6 +150,7 @@ userinit(void)
   acquire(&ptable.lock);
 
   p->state = RUNNABLE;
+  p->nice = 20;
 
   release(&ptable.lock);
 }
@@ -549,4 +551,61 @@ getpname(int pid)
 
   release(&ptable.lock);
   return -1;
+}
+
+static char* procstate_to_string(enum procstate state) {
+  switch (state)
+  {
+  case UNUSED:
+    return "UNUSED";
+  case EMBRYO:
+    return "EMBRYO";
+  case SLEEPING:
+    return "SLEEPING";
+  case RUNNABLE:
+    return "RUNNABLE";
+  case RUNNING:
+    return "RUNNING";
+  case ZOMBIE:
+    return "ZOMBIE";
+  default:
+    return "NULL";
+  }
+}
+
+static struct proc* find_proc_by_pid(int pid) {
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->pid == pid) {
+      release(&ptable.lock);
+      return p;
+    }
+  }
+  release(&ptable.lock);
+
+  return NULL;
+}
+
+void
+ps(int pid)
+{
+  if(find_proc_by_pid(pid) == NULL) return;
+
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  cprintf("name\t pid\t state\t\t nice\n");
+
+  int is_brute_force = (pid == 0);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
+        cprintf("%s\t %d\t %s\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice);
+    }
+  }
+
+  release(&ptable.lock);  
+
+  return;
 }
