@@ -87,6 +87,7 @@ allocproc(void)
 
 found:
   p->state = EMBRYO;
+  p->nice = 20;
   p->pid = nextpid++;
 
   release(&ptable.lock);
@@ -531,4 +532,126 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int
+getpname(int pid) 
+{
+  struct proc *p;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->pid == pid) {
+      cprintf("%s\n", p->name);
+      release(&ptable.lock);
+      return 0;
+    }
+  }
+
+  release(&ptable.lock);
+  return -1;
+}
+
+static char* procstate_to_string(enum procstate state);
+static struct proc* find_proc_by_pid(int pid);
+static int is_proc_alive(struct proc*);
+
+void
+ps(int pid)
+{
+  int is_brute_force = (pid == 0);
+
+  // pid가 0이 아니면서 살아있어야 한다.
+  struct proc *p = find_proc_by_pid(pid);
+  if(!is_proc_alive(p) && !is_brute_force) return;
+
+  acquire(&ptable.lock);
+  cprintf("name\t pid\t state\t\t nice\n");
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
+        cprintf("%s\t %d\t %s\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice);
+    }
+  }
+
+  release(&ptable.lock);  
+
+  return;
+}
+
+int
+getnice(int pid)
+{
+  struct proc *p = find_proc_by_pid(pid);
+  if(!is_proc_alive(p)) return -1;
+  
+  acquire(&ptable.lock);
+  int ret = p->nice;
+  release(&ptable.lock);
+
+  return ret;
+}
+
+int
+setnice(int pid, int value)
+{
+  struct proc *p = find_proc_by_pid(pid);
+  if(!is_proc_alive(p)) return -1;
+
+  if(value < 0 || value > 39) return -1; // 0 <= nice <= 39
+  acquire(&ptable.lock);
+  p->nice = value;
+  release(&ptable.lock);
+
+  return 0;
+}
+
+
+
+/** helper function impls*/
+static char* procstate_to_string(enum procstate state) {
+  switch (state)
+  {
+  case UNUSED:
+    return "UNUSED";
+  case EMBRYO:
+    return "EMBRYO";
+  case SLEEPING:
+    return "SLEEPING";
+  case RUNNABLE:
+    return "RUNNABLE";
+  case RUNNING:
+    return "RUNNING";
+  case ZOMBIE:
+    return "ZOMBIE";
+  default:
+    return "NULL";
+  }
+}
+
+
+static struct proc* find_proc_by_pid(int pid) {
+  struct proc *ret = NULL;
+
+  acquire(&ptable.lock);
+  for(struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->pid == pid) {
+      ret = p;
+    }
+  }
+  release(&ptable.lock);
+
+  return ret;
+}
+
+// process가 NULL이면 0을 return
+// 나중에 ZOMBIE나 EMBRYO같은 STATE도 신경써야돼.
+static int is_proc_alive(struct proc *p) {
+  if(p == NULL) return 0;
+
+  acquire(&ptable.lock);
+  int ret = (p->state != UNUSED);
+  release(&ptable.lock);
+
+  return ret;
 }
