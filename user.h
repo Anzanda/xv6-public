@@ -25,6 +25,7 @@ int sleep(int);
 int uptime(void);
 int getpname(int);
 void ps(int);
+int getnice(int);
 
 // ulib.c
 int stat(const char*, struct stat*);

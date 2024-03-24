@@ -553,6 +553,49 @@ getpname(int pid)
   return -1;
 }
 
+static char* procstate_to_string(enum procstate state);
+static struct proc* find_proc_by_pid(int pid);
+static int is_proc_alive(struct proc*);
+
+void
+ps(int pid)
+{
+  int is_brute_force = (pid == 0);
+
+  // pid가 0이 아니면서 살아있어야 한다.
+  struct proc *p = find_proc_by_pid(pid);
+  if(!is_proc_alive(p) && !is_brute_force) return;
+
+  acquire(&ptable.lock);
+  cprintf("name\t pid\t state\t\t nice\n");
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
+        cprintf("%s\t %d\t %s\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice);
+    }
+  }
+
+  release(&ptable.lock);  
+
+  return;
+}
+
+int
+getnice(int pid)
+{
+  struct proc *p = find_proc_by_pid(pid);
+  if(!is_proc_alive(p)) return -1;
+  
+  acquire(&ptable.lock);
+  int ret = p->nice;
+  release(&ptable.lock);
+
+  return ret;
+}
+
+
+
+/** helper function impls*/
 static char* procstate_to_string(enum procstate state) {
   switch (state)
   {
@@ -573,39 +616,29 @@ static char* procstate_to_string(enum procstate state) {
   }
 }
 
+
 static struct proc* find_proc_by_pid(int pid) {
-  struct proc *p;
+  struct proc *ret = NULL;
 
   acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+  for(struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if(p->pid == pid) {
-      release(&ptable.lock);
-      return p;
+      ret = p;
     }
   }
   release(&ptable.lock);
 
-  return NULL;
+  return ret;
 }
 
-void
-ps(int pid)
-{
-  if(find_proc_by_pid(pid) == NULL) return;
-
-  struct proc *p;
+// process가 NULL이면 0을 return
+// 나중에 ZOMBIE나 EMBRYO같은 STATE도 신경써야돼.
+static int is_proc_alive(struct proc *p) {
+  if(p == NULL) return 0;
 
   acquire(&ptable.lock);
-  cprintf("name\t pid\t state\t\t nice\n");
+  int ret = (p->state != UNUSED);
+  release(&ptable.lock);
 
-  int is_brute_force = (pid == 0);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-    if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
-        cprintf("%s\t %d\t %s\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice);
-    }
-  }
-
-  release(&ptable.lock);  
-
-  return;
+  return ret;
 }

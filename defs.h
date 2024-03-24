@@ -122,6 +122,7 @@ void            wakeup(void*);
 void            yield(void);
 int             getpname(int);
 void            ps(int);
+int             getnice(int);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

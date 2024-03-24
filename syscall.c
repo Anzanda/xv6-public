@@ -105,6 +105,7 @@ extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_getpname(void);
 extern int sys_ps(void);
+extern int sys_getnice(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -130,6 +131,7 @@ static int (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_getpname] sys_getpname,
 [SYS_ps]      sys_ps,
+[SYS_getnice] sys_getnice,
 };
 
 void
