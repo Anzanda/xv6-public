@@ -150,7 +150,6 @@ userinit(void)
   acquire(&ptable.lock);
 
   p->state = RUNNABLE;
-  p->nice = 20;
 
   release(&ptable.lock);
 }
