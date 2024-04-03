@@ -565,7 +565,10 @@ ps(int pid)
   struct proc *p = find_proc_by_pid(pid);
 
   // pid가 0이 아니면서 살아있어야 한다.
-  if(!is_proc_alive(p) && !is_brute_force) return;
+  if(!is_proc_alive(p) && !is_brute_force) {
+    release(&ptable.lock);
+    return;
+  }
 
   cprintf("name\t pid\t state\t\t priority\n");
 
@@ -585,7 +588,10 @@ getnice(int pid)
 {
   acquire(&ptable.lock);
   struct proc *p = find_proc_by_pid(pid);
-  if(!is_proc_alive(p)) return -1;
+  if(!is_proc_alive(p)) {
+    release(&ptable.lock);
+    return -1;
+  }
   
   int ret = p->nice;
   release(&ptable.lock);
@@ -598,9 +604,11 @@ setnice(int pid, int value)
 {
   acquire(&ptable.lock);
   struct proc *p = find_proc_by_pid(pid);
-  if(!is_proc_alive(p)) return -1;
+  if(!is_proc_alive(p) || (value <0 || value > 39)) {
+    release(&ptable.lock);
+    return -1;
+  }
 
-  if(value < 0 || value > 39) return -1; // 0 <= nice <= 39
   p->nice = value;
   release(&ptable.lock);
 
