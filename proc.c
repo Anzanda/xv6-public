@@ -566,7 +566,7 @@ ps(int pid)
   if(!is_proc_alive(p) && !is_brute_force) return;
 
   acquire(&ptable.lock);
-  cprintf("name\t pid\t state\t\t nice\n");
+  cprintf("name\t pid\t state\t\t priority\n");
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
