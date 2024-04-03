@@ -561,11 +561,12 @@ ps(int pid)
 {
   int is_brute_force = (pid == 0);
 
-  // pid가 0이 아니면서 살아있어야 한다.
+  acquire(&ptable.lock);
   struct proc *p = find_proc_by_pid(pid);
+
+  // pid가 0이 아니면서 살아있어야 한다.
   if(!is_proc_alive(p) && !is_brute_force) return;
 
-  acquire(&ptable.lock);
   cprintf("name\t pid\t state\t\t priority\n");
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
@@ -574,7 +575,7 @@ ps(int pid)
     }
   }
 
-  release(&ptable.lock);  
+  release(&ptable.lock);
 
   return;
 }
@@ -582,10 +583,10 @@ ps(int pid)
 int
 getnice(int pid)
 {
+  acquire(&ptable.lock);
   struct proc *p = find_proc_by_pid(pid);
   if(!is_proc_alive(p)) return -1;
   
-  acquire(&ptable.lock);
   int ret = p->nice;
   release(&ptable.lock);
 
@@ -595,11 +596,11 @@ getnice(int pid)
 int
 setnice(int pid, int value)
 {
+  acquire(&ptable.lock);
   struct proc *p = find_proc_by_pid(pid);
   if(!is_proc_alive(p)) return -1;
 
   if(value < 0 || value > 39) return -1; // 0 <= nice <= 39
-  acquire(&ptable.lock);
   p->nice = value;
   release(&ptable.lock);
 
@@ -633,13 +634,11 @@ static char* procstate_to_string(enum procstate state) {
 static struct proc* find_proc_by_pid(int pid) {
   struct proc *ret = NULL;
 
-  acquire(&ptable.lock);
   for(struct proc *p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if(p->pid == pid) {
       ret = p;
     }
   }
-  release(&ptable.lock);
 
   return ret;
 }
@@ -649,9 +648,6 @@ static struct proc* find_proc_by_pid(int pid) {
 static int is_proc_alive(struct proc *p) {
   if(p == NULL) return 0;
 
-  acquire(&ptable.lock);
   int ret = (p->state != UNUSED);
-  release(&ptable.lock);
-
   return ret;
 }
