@@ -88,6 +88,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->nice = 20;
+  p->runtime = 0;
   p->pid = nextpid++;
 
   release(&ptable.lock);
@@ -312,6 +313,18 @@ wait(void)
   }
 }
 
+// custom scheduler
+static const int nice_to_weight[40] = {
+  /* 0 */  88761, 71755, 56483, 46273, 36291,
+  /* 5 */  29154, 23254, 18705, 14949, 11916,
+  /* 10 */ 9548,   7620,  6100,  4904,  3906,
+  /* 15 */ 3121,   2501,  1991,  1586,  1277,
+  /* 20 */ 1024,    820,   655,   526,   423,
+  /* 25 */  335,    272,   215,   172,   137,
+  /* 30 */  110,     87,    70,    56,    45,
+  /* 35 */   36,     29,    23,    18,    15,
+};
+
 //PAGEBREAK: 42
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
@@ -332,6 +345,13 @@ scheduler(void)
     sti();
 
     // Loop over process table looking for process to run.
+    // int total_weight = 0;
+    // for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    //   if(p->state != RUNNABLE) 
+    //     continue;
+    //   total_weight += nice_to_weight[p->nice];
+    // }
+
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
@@ -343,6 +363,9 @@ scheduler(void)
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
+      acquire(&tickslock);
+      p->tick_at_started = ticks;
+      release(&tickslock);
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
@@ -388,6 +411,10 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
+  acquire(&tickslock);
+  if(myproc()->tick_at_started != 0) // TODO: 약간 불안한 조건...
+    myproc()->runtime += (ticks - myproc()->tick_at_started);
+  release(&tickslock);
   sched();
   release(&ptable.lock);
 }
@@ -570,11 +597,11 @@ ps(int pid)
     return;
   }
 
-  cprintf("name\t pid\t state\t\t priority\n");
+  cprintf("name\t pid\t state\t\t priority\t runtime\t tick: %d\n", ticks*1000);
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
-        cprintf("%s\t %d\t %s\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice);
+        cprintf("%s\t %d\t %s\t %d\t\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice, p->runtime*1000);
     }
   }
 
