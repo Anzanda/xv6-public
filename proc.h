@@ -52,8 +52,10 @@ struct proc {
   
   /** custom */
   int nice;                    // nice value to help scheduling
-  uint tick_at_started;
   uint runtime;
+  uint delta_runtime;
+  uint vruntime;
+  uint time_slice;
 };
 
 // Process memory is laid out contiguously, low addresses first:

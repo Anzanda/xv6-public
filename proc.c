@@ -89,6 +89,7 @@ found:
   p->state = EMBRYO;
   p->nice = 20;
   p->runtime = 0;
+  p->vruntime = 0;
   p->pid = nextpid++;
 
   release(&ptable.lock);
@@ -331,7 +332,7 @@ static const int nice_to_weight[40] = {
 // Scheduler never returns.  It loops, doing:
 //  - choose a process to run
 //  - swtch to start running that process
-//  - eventually that process transfers control
+//  - eventually that process transfers 
 //      via swtch back to the scheduler.
 void
 scheduler(void)
@@ -344,28 +345,38 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
-    // Loop over process table looking for process to run.
-    // int total_weight = 0;
-    // for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    //   if(p->state != RUNNABLE) 
-    //     continue;
-    //   total_weight += nice_to_weight[p->nice];
-    // }
-
     acquire(&ptable.lock);
+    uint min_vruntime = 987654321;
+    struct proc* candidate = ptable.proc;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
+      
+      p->vruntime += p->delta_runtime * nice_to_weight[20] / nice_to_weight[p->nice];
+      p->runtime += p->delta_runtime;
+      p->delta_runtime = 0;
 
+      if(min_vruntime > p->vruntime) {
+        candidate = p;
+        min_vruntime = p->vruntime;
+      } 
+    }
+    if(candidate->state == RUNNABLE){
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+      int total_weights = 0;
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != RUNNABLE)
+          continue;
+        total_weights += nice_to_weight[p->nice];
+      }
+
+      p = candidate;
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      acquire(&tickslock);
-      p->tick_at_started = ticks;
-      release(&tickslock);
+      p->time_slice = 10000 * nice_to_weight[p->nice] / total_weights;
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
@@ -375,7 +386,6 @@ scheduler(void)
       c->proc = 0;
     }
     release(&ptable.lock);
-
   }
 }
 
@@ -411,10 +421,6 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
-  acquire(&tickslock);
-  if(myproc()->tick_at_started != 0) // TODO: 약간 불안한 조건...
-    myproc()->runtime += (ticks - myproc()->tick_at_started);
-  release(&tickslock);
   sched();
   release(&ptable.lock);
 }
@@ -597,13 +603,22 @@ ps(int pid)
     return;
   }
 
-  cprintf("name\t pid\t state\t\t priority\t runtime\t tick: %d\n", ticks*1000);
+  // cprintf("name\t pid\t state\t\t priority\t runtime\t tick: %d\n", ticks*1000);
 
+  // for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+  //   if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
+  //       cprintf("%s\t %d\t %s\t %d\t\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice);
+  //   }
+  // }
+  // TODO: custom
+  cprintf("name\t pid\t state\t\t vruntime\t runtime\t time_slice\t tick: %d\n", ticks*1000);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
-        cprintf("%s\t %d\t %s\t %d\t\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice, p->runtime*1000);
+        cprintf("%s\t %d\t %s\t %d\t\t %d\t\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->vruntime, p->runtime, p->time_slice);
     }
   }
+
+
 
   release(&ptable.lock);
 
