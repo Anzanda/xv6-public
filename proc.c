@@ -349,7 +349,8 @@ scheduler(void)
     sti();
 
     acquire(&ptable.lock);
-    uint min_vruntime = 987654321;
+    int INF = 0x7fffffff;
+    int min_vruntime = INF;
     struct proc* candidate = ptable.proc;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
@@ -492,14 +493,15 @@ wakeup1(void *chan)
 {
   struct proc *p;
 
-  int min_vruntime = 987654321;
+  int INF = 0x7fffffff;
+  int min_vruntime = INF;
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if(p->state != RUNNABLE) continue;
     if(min_vruntime > p->vruntime) {
       min_vruntime = p->vruntime;
     }
   }
-  min_vruntime = (min_vruntime == 987654321) ? 0 : min_vruntime;
+  min_vruntime = (min_vruntime == INF) ? 0 : min_vruntime;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if(p->state == SLEEPING && p->chan == chan) {
