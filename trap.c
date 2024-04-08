@@ -94,6 +94,16 @@ trap(struct trapframe *tf)
     myproc()->killed = 1;
   }
 
+  const int nice_to_weight[40] = {
+    /* 0 */  88761, 71755, 56483, 46273, 36291,
+    /* 5 */  29154, 23254, 18705, 14949, 11916,
+    /* 10 */ 9548,   7620,  6100,  4904,  3906,
+    /* 15 */ 3121,   2501,  1991,  1586,  1277,
+    /* 20 */ 1024,    820,   655,   526,   423,
+    /* 25 */  335,    272,   215,   172,   137,
+    /* 30 */  110,     87,    70,    56,    45,
+    /* 35 */   36,     29,    23,    18,    15,
+  };
   // Force process exit if it has been killed and is in user space.
   // (If it is still executing in the kernel, let it keep running
   // until it gets to the regular system call return.)
@@ -105,8 +115,10 @@ trap(struct trapframe *tf)
   // timer interrup <-> timer increasing
   if(myproc() && myproc()->state == RUNNING && tf->trapno == T_IRQ0+IRQ_TIMER) {
     // TODO: round robin대신 cfs로직 추가.
-    myproc()->delta_runtime += 1000;
-    if((myproc()->delta_runtime % myproc()->time_slice) == 0) {
+    myproc()->time_slice -= 1000;
+    myproc()->runtime += 1000;
+    myproc()->vruntime += (1000 * nice_to_weight[20] / nice_to_weight[myproc()->nice]);
+    if(myproc()->time_slice <= 0) {
       yield();
     }
   }

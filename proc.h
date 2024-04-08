@@ -53,7 +53,6 @@ struct proc {
   /** custom */
   int nice;                    // nice value to help scheduling
   uint runtime;
-  uint delta_runtime;
   uint vruntime;
   uint time_slice;
 };

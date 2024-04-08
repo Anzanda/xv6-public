@@ -417,12 +417,6 @@ yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
   myproc()->state = RUNNABLE;
-
-  // vruntime을 처리하는 건 state가 바뀌는 yield()의 책임이다.
-  myproc()->runtime += myproc()->delta_runtime;
-  myproc()->vruntime += myproc()->delta_runtime * nice_to_weight[20] / nice_to_weight[myproc()->nice];
-  myproc()->delta_runtime = 0;
-
   sched();
   release(&ptable.lock);
 }
