@@ -218,6 +218,9 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  np->nice = curproc->nice;
+  np->runtime = curproc->runtime;
+  np->vruntime = curproc->vruntime;
 
   release(&ptable.lock);
 
@@ -489,9 +492,22 @@ wakeup1(void *chan)
 {
   struct proc *p;
 
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+  int min_vruntime = 987654321;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->state != RUNNABLE) continue;
+    if(min_vruntime > p->vruntime) {
+      min_vruntime = p->vruntime;
+    }
+  }
+  min_vruntime = (min_vruntime == 987654321) ? 0 : min_vruntime;
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->state == SLEEPING && p->chan == chan) {
       p->state = RUNNABLE;
+      p->vruntime = min_vruntime - (1000 * nice_to_weight[20] / nice_to_weight[p->nice]);
+      p->vruntime = p->vruntime > 0 ? p->vruntime : 0;
+    }
+  }
 }
 
 // Wake up all processes sleeping on chan.
@@ -599,23 +615,12 @@ ps(int pid)
     return;
   }
 
-  // cprintf("name\t pid\t state\t\t priority\t runtime\t tick: %d\n", ticks*1000);
-
-  // for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
-  //   if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
-  //       cprintf("%s\t %d\t %s\t %d\t\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice);
-  //   }
-  // }
-  // TODO: custom
-  cprintf("name\t pid\t state\t\t vruntime\t runtime\t time_slice\t tick: %d\n", ticks*1000);
+  cprintf("name\t pid\t state\t\t priority\t runtime/weight\t\t runtime\t vruntime\t tick: %d\n", ticks*1000);
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
     if((p->pid == pid || is_brute_force) && p->state != UNUSED) {
-        cprintf("%s\t %d\t %s\t %d\t\t %d\t\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->vruntime, p->runtime, p->time_slice);
+        cprintf("%s\t %d\t %s\t %d\t\t %d\t\t\t %d\t\t %d\n", p->name, p->pid, procstate_to_string(p->state), p->nice, (p->runtime/nice_to_weight[p->nice]), p->runtime, p->vruntime);
     }
   }
-
-
-
   release(&ptable.lock);
 
   return;
