@@ -164,3 +164,9 @@ sys_mmap(void)
 
   return mmap(addr, length, prot, flags, fd, offset);
 }
+
+int
+sys_freemem(void)
+{
+  return freemem();
+}

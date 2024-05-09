@@ -25,3 +25,4 @@
 #define SYS_getnice     24
 #define SYS_setnice     25
 #define SYS_mmap        26
+#define SYS_freemem     27

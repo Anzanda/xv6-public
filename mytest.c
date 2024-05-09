@@ -6,6 +6,8 @@
 int
 main(void)
 {
-    printf(1, "%d", mmap(0x80000000,0,0,0,0,0));
+    printf(1, "freemem: %d\n", freemem());
+    malloc(1);
+    printf(1, "freemem: %d\n", freemem());
     exit();
 }

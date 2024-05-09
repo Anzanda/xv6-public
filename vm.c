@@ -421,6 +421,10 @@ uint mmap(uint addr, int length, int prot, int flags, int fd, int offset) {
   return kfreemem();
 }
 
+int freemem(void) {
+  return kfreemem();
+}
+
 // PAGEBREAK!
 //  Blank page.
 // PAGEBREAK!

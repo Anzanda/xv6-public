@@ -28,6 +28,7 @@ void ps(int);
 int getnice(int);
 int setnice(int, int);
 uint mmap(uint, int, int, int, int, int);
+int freemem(void);
 
 // ulib.c
 int stat(const char*, struct stat*);
