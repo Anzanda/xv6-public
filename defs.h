@@ -66,6 +66,7 @@ void            ioapicinit(void);
 // kalloc.c
 char*           kalloc(void);
 void            kfree(char*);
+int             kfreemem(void);
 void            kinit1(void*, void*);
 void            kinit2(void*, void*);
 
@@ -175,6 +176,7 @@ void            uartintr(void);
 void            uartputc(int);
 
 // vm.c
+void            minit(void);
 void            seginit(void);
 void            kvmalloc(void);
 pde_t*          setupkvm(void);
@@ -189,6 +191,7 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+uint            mmap(uint, int, int, int, int, int);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

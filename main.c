@@ -21,6 +21,7 @@ main(void)
   kvmalloc();      // kernel page table
   mpinit();        // detect other processors
   lapicinit();     // interrupt controller
+  minit();         // mmap table
   seginit();       // segment descriptors
   picinit();       // disable pic
   ioapicinit();    // another interrupt controller

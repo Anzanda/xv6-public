@@ -23,10 +23,18 @@ struct
 {
   struct spinlock lock;
   struct mmap_area areas[NMMAP];
-} mmap_table;
+} mtable;
+
+
 
 extern char data[]; // defined by kernel.ld
 pde_t *kpgdir;      // for use in scheduler()
+
+void
+minit(void)
+{
+  initlock(&mtable.lock, "mtable");
+}
 
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
@@ -407,6 +415,10 @@ int copyout(pde_t *pgdir, uint va, void *p, uint len)
     va = va0 + PGSIZE;
   }
   return 0;
+}
+
+uint mmap(uint addr, int length, int prot, int flags, int fd, int offset) {
+  return kfreemem();
 }
 
 // PAGEBREAK!
