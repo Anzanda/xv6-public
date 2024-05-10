@@ -524,6 +524,73 @@ bad:
   return 0;
 }
 
+int handle_page_fault()
+{
+  uint fault_addr = rcr2();
+
+  struct mmap_area *m;
+
+  acquire(&mtable.lock);
+  
+  for (m = mtable.areas; m < &mtable.areas[NMMAP]; m++)
+  {
+    if (!m->is_used)
+      continue;
+    uint base_addr = m->addr + MMAPBASE;
+    if (base_addr <= fault_addr && fault_addr <= base_addr + m->length)
+      goto found;
+  }
+  release(&mtable.lock);
+  return -1;
+
+found:  
+  release(&mtable.lock);
+
+  // If fault was write whilte mmap_area is write prohibited.
+  if ((myproc()->tf->err & 2 == 1) && (!(m->prot&PROT_WRITE)))
+    return -1;
+
+  pde_t *pgdir = m->p->pgdir;
+  pte_t *pte;
+  uint base_addr = m->addr + MMAPBASE;
+  uint pa, pte_flags, curr_addr;
+  char *mem;
+  if ((mem = kalloc()) == 0)
+    return -1;
+  if (m->flags & MAP_ANONYMOUS)
+    memset(mem, 0, PGSIZE);
+  else
+  {
+    // TODO: fileread의 size가 file의 size보다 클 때?
+    // 1. fault_addr가 start_addr와 같은 페이지 내에 존재.
+    if (PGROUNDDOWN(fault_addr) == PGROUNDDOWN(base_addr))
+    {
+      m->f->off = m->offset;
+      uint size = PGROUNDUP(base_addr) - base_addr;
+      if (size == 0)
+        size = PGSIZE;
+      fileread(m->f, mem + (base_addr - PGROUNDDOWN(base_addr)), size);
+    }
+    // 2. fault_addr가 다른 페이지 내에 존재.
+    else
+    {
+      m->f->off = m->offset + (PGROUNDDOWN(fault_addr) - base_addr);
+      fileread(m->f, mem, PGSIZE);
+    }
+  }
+  // TODO: writable condition나누기. mmap에도 해줘야됨.
+  uint size = PGROUNDUP(fault_addr) - fault_addr;
+  if (size == 0)
+    size = PGSIZE;
+  if (mappages(pgdir, (void *)fault_addr, size, V2P(mem), PTE_W | PTE_U) < 0)
+  {
+    kfree(mem);
+    return -1;
+  }
+
+  return 0;
+}
+
 int freemem(void)
 {
   return kfreemem();

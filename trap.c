@@ -80,6 +80,8 @@ trap(struct trapframe *tf)
   //PAGEBREAK: 13
   case T_PGFLT:
     // TODO: page fault handler
+    handle_page_fault();
+    break;
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
       // In kernel, it must be our mistake.
