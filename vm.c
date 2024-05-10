@@ -7,16 +7,22 @@
 #include "proc.h"
 #include "elf.h"
 #include "spinlock.h"
+#include "fs.h"
+#include "sleeplock.h"
+#include "file.h"
 
 struct mmap_area
 {
   struct file *f;
   uint addr;
   int length;
-  int offset;
   int prot;
   int flags;
-  struct proc *p // the process with this mmap_area
+  int fd;
+  int offset;
+  struct proc *p; // the process with this mmap_area
+
+  int is_used;
 };
 
 struct
@@ -417,11 +423,109 @@ int copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
-uint mmap(uint addr, int length, int prot, int flags, int fd, int offset) {
-  return kfreemem();
+// private
+static int map_file(struct mmap_area *m)
+{
+  m->f = m->p->ofile[m->fd]; 
+  if (m->f == 0)
+    return -1;
+  if ((m->f->readable != (m->prot & PROT_READ)) || (m->f->writable != (m->prot & PROT_WRITE)))
+    return -1;
+
+  m->f->off = m->offset;
+  return 0;
 }
 
-int freemem(void) {
+// public
+uint mmap(uint addr, int length, int prot, int flags, int fd, int offset)
+{
+  if(NOT_INCLUDE(flags, MAP_ANONYMOUS) && fd == -1) return 0; // anonymous가 아닌데 fd가 -1
+
+  struct mmap_area *m;
+
+  acquire(&mtable.lock);
+
+  for(m = mtable.areas; m < &mtable.areas[NMMAP]; m++)
+    if(!m->is_used)
+      goto found;
+
+  release(&mtable.lock);
+  return 0; // 없을 때.
+  
+found:
+/**
+ * TODO
+ * - file 불러오기
+ * - POPULATE옵션을 안 주면? 일단 PTE를 만들고 present bit를 0으로 준다?
+ * - 
+ * - POPULATE 안 줬을 때 page fault는 어디서 발생시킬 것인가?
+ *   - page fault를 발생시키려면 page정보가 있어야된다...
+ *   - 뇌피셜로는 walkpgdir에서 page valid가 꺼져있으면 page fault 발생시키는 게 맞지 않을까 싶은데..
+*/
+  m->is_used = 1;
+  m->addr = addr;
+  m->length = length;
+  m->prot = prot;
+  m->flags = flags;
+  m->fd = fd;
+  m->offset = offset;
+  m->p = myproc();
+
+  release(&mtable.lock);
+
+  if (NOT_INCLUDE(m->flags, MAP_ANONYMOUS) && (map_file(m) == -1))
+    goto bad;
+
+  if (NOT_INCLUDE(m->flags, MAP_POPULATE))
+    goto finish;
+
+  pde_t *pgdir = m->p->pgdir;
+  pte_t *pte;
+  uint base_addr = m->addr + MMAPBASE;
+  uint pa, pte_flags, curr_addr;
+  char *mem;
+  for (curr_addr = base_addr; curr_addr < PGROUNDUP(base_addr); curr_addr += PGSIZE)
+  {
+    if ((mem = kalloc()) == 0)
+      goto bad;
+    if (flags & MAP_ANONYMOUS)
+      memset(mem, 0, PGSIZE);
+    else
+      fileread(m->f, mem + (curr_addr - PGROUNDDOWN(curr_addr)), (PGROUNDUP(curr_addr) - curr_addr));
+    if (mappages(pgdir, (void *)curr_addr, (PGROUNDUP(curr_addr) - curr_addr), V2P(mem), PTE_W | PTE_U) < 0)
+    {
+      kfree(mem);
+      goto bad;
+    }
+  }
+  for (curr_addr = PGROUNDDOWN(curr_addr); curr_addr < base_addr + length; curr_addr += PGSIZE)
+  {
+    if ((mem = kalloc()) == 0)
+      goto bad;
+    if (flags & MAP_ANONYMOUS)
+      memset(mem, 0, PGSIZE);
+    else
+      fileread(m->f, mem, PGSIZE);
+    if (mappages(pgdir, (void *)curr_addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
+    {
+      kfree(mem);
+      goto bad;
+    }
+  }
+
+finish:
+  return addr + MMAPBASE;
+
+bad:
+  // TODO: bad로직이 더 있을까? is_used??
+  acquire(&mtable.lock);
+  m->is_used = 0;
+  release(&mtable.lock);
+  return 0;
+}
+
+int freemem(void)
+{
   return kfreemem();
 }
 

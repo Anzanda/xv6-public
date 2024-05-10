@@ -18,4 +18,6 @@
 #define MAP_ANONYMOUS 0x1
 #define MAP_POPULATE 0x2
 
+#define NOT_INCLUDE(a, f)  (!((a) & (f)))
+
 #define NMMAP 64 // maximum number of mmap areas

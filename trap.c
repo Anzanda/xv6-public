@@ -77,8 +77,9 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
-
   //PAGEBREAK: 13
+  case T_PGFLT:
+    // TODO: page fault handler
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
       // In kernel, it must be our mistake.
