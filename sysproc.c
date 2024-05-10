@@ -162,7 +162,7 @@ sys_mmap(void)
   if(argint(5, &offset) < 0)
     return -1;
 
-  return mmap(addr, length, prot, flags, fd, offset);
+  return mmap((uint)addr, length, prot, flags, fd, offset);
 }
 
 int
@@ -174,9 +174,9 @@ sys_freemem(void)
 int
 sys_munmap(void)
 {
-  uint addr;
+  int addr;
   if(argint(0, &addr) < 0)
     return -1;
 
-  return munmap(addr);  
+  return munmap((uint)addr);  
 }

@@ -29,7 +29,7 @@ test_file()
     printf(1, "a[4098]: %c\n", a[4098]);
     printf(1, "freemem: %d\n", freemem());
 
-    printf(1, "munmap return value: %d\n", munmap(a));
+    printf(1, "munmap return value: %d\n", munmap((uint)a));
     printf(1, "after munmap freemem: %d\n", freemem());
     close(fd);
 }
@@ -55,7 +55,7 @@ test_munmap()
     printf(1, "a[4098]: %c\n", a[4098]);
     printf(1, "freemem: %d\n", freemem());
 
-    printf(1, "munmap return value: %d\n", munmap(a));
+    printf(1, "munmap return value: %d\n", munmap((uint)a));
     printf(1, "after munmap freemem: %d\n", freemem());
 
     char* b = (char*)mmap(addr, length, prot, flags, fd, offset);

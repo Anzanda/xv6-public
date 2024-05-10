@@ -481,9 +481,8 @@ found:
     goto finish;
 
   pde_t *pgdir = m->p->pgdir;
-  pte_t *pte;
   uint base_addr = m->addr + MMAPBASE;
-  uint pa, pte_flags, curr_addr;
+  uint curr_addr;
   char *mem;
   for (curr_addr = base_addr; curr_addr < PGROUNDUP(base_addr); curr_addr += PGSIZE)
   {
@@ -549,13 +548,11 @@ found:
   release(&mtable.lock);
 
   // If fault was write whilte mmap_area is write prohibited.
-  if ((myproc()->tf->err & 2 == 1) && (!(m->prot&PROT_WRITE)))
+  if (((myproc()->tf->err) & (2)) && (!(m->prot&PROT_WRITE)))
     return -1;
 
   pde_t *pgdir = m->p->pgdir;
-  pte_t *pte;
   uint base_addr = m->addr + MMAPBASE;
-  uint pa, pte_flags, curr_addr;
   char *mem;
   if ((mem = kalloc()) == 0)
     return -1;
