@@ -29,6 +29,7 @@ int getnice(int);
 int setnice(int, int);
 uint mmap(uint, int, int, int, int, int);
 int freemem(void);
+int munmap(uint);
 
 // ulib.c
 int stat(const char*, struct stat*);

@@ -437,7 +437,8 @@ static int map_file(struct mmap_area *m)
 }
 
 // public
-uint mmap(uint addr, int length, int prot, int flags, int fd, int offset)
+uint
+mmap(uint addr, int length, int prot, int flags, int fd, int offset)
 {
   if(NOT_INCLUDE(flags, MAP_ANONYMOUS) && fd == -1) return 0; // anonymous가 아닌데 fd가 -1
 
@@ -524,7 +525,8 @@ bad:
   return 0;
 }
 
-int handle_page_fault()
+int
+handle_page_fault()
 {
   uint fault_addr = rcr2();
 
@@ -591,9 +593,75 @@ found:
   return 0;
 }
 
-int freemem(void)
+int
+freemem(void)
 {
   return kfreemem();
+}
+
+int
+munmap(uint addr)
+{
+  struct mmap_area *m; 
+
+  acquire(&mtable.lock);
+  
+  for (m = mtable.areas; m < &mtable.areas[NMMAP]; m++)
+  {
+    if (!m->is_used)
+      continue;
+    if (m->addr+MMAPBASE == addr)
+      goto found;
+  }
+
+  release(&mtable.lock);
+  return -1;
+
+found:
+  release(&mtable.lock);
+  /**
+   * 1. mmap_area가 존재한다면, 이거 remove 해줘야됨.
+   * 2. physical page, page table이 할당 됐다면, deallocate해줘야됨.
+   * 3. 만약 할당 되지 않았다면, mmap_area만 없애 주면 됨.
+   * 
+  */
+  pte_t *pte;
+  uint a, pa;
+
+  uint base_addr = m->addr + MMAPBASE;
+  a = PGROUNDDOWN(base_addr);
+  for (; a < base_addr + m->length; a += PGSIZE) 
+  {
+    pte = walkpgdir(m->p->pgdir, (char *)a, 0);
+    if (!pte)
+      a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
+    else if ((*pte & PTE_P) != 0)
+    {
+      pa = PTE_ADDR(*pte);
+      if (pa == 0)
+        panic("kfree");
+      char *v = P2V(pa);
+      kfree(v);
+      *pte = 0;
+    }
+  }
+
+  // TODO: page table 청소
+  acquire(&mtable.lock);
+
+  m->is_used = 0;
+  m->f = 0;
+  m->addr = 0;
+  m->length = 0;
+  m->prot = 0;
+  m->flags = 0;
+  m->fd = 0;
+  m->offset = 0;
+  m->p = 0;
+
+  release(&mtable.lock);
+
+  return 1;
 }
 
 // PAGEBREAK!

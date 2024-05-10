@@ -170,3 +170,13 @@ sys_freemem(void)
 {
   return freemem();
 }
+
+int
+sys_munmap(void)
+{
+  uint addr;
+  if(argint(0, &addr) < 0)
+    return -1;
+
+  return munmap(addr);  
+}

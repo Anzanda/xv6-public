@@ -194,6 +194,7 @@ void            clearpteu(pde_t *pgdir, char *uva);
 uint            mmap(uint, int, int, int, int, int);
 int             handle_page_fault();
 int             freemem(void);
+int             munmap(uint);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
