@@ -429,31 +429,74 @@ static int map_file(struct mmap_area *m)
   m->f = m->p->ofile[m->fd]; 
   if (m->f == 0)
     return -1;
-  if ((m->f->readable != (m->prot & PROT_READ)) || (m->f->writable != (m->prot & PROT_WRITE)))
-    return -1;
+  
+  // O_RDWR일 때, PROT_READ와 PROT_WRITE 둘 중 하나만 있어도 됨.
+  if ((m->f->readable == 1) && (m->f->writable == 1))
+  {
+    if (NOT_INCLUDE(m->prot, PROT_READ) && NOT_INCLUDE(m->prot, PROT_WRITE))
+      return -1;
+  }
+  else
+  {
+    if ((m->f->readable != INCLUDE(m->prot, PROT_READ)) || (m->f->writable != INCLUDE(m->prot, PROT_WRITE)))
+      return -1;
+  }
 
   m->f->off = m->offset;
   return 0;
 }
 
-// public
-uint
-mmap(uint addr, int length, int prot, int flags, int fd, int offset)
+static struct mmap_area*
+find_unused_mmap_area()
 {
-  if(NOT_INCLUDE(flags, MAP_ANONYMOUS) && fd == -1) return 0; // anonymous가 아닌데 fd가 -1
+  struct mmap_area *ret = (struct mmap_area*)(-1);
+  for (struct mmap_area *m = mtable.areas; m < &mtable.areas[NMMAP]; m++)
+  {
+    if (!m->is_used)
+    {
+      ret = m;
+      break;
+    }
+  } 
+
+  return ret; 
+}
+
+// mmap을 위한 mappages wrapper
+static int
+_mappages(pde_t *pgdir, void *va, uint size, uint pa, struct mmap_area *m)
+{
+  if (INCLUDE(m->flags, MAP_ANONYMOUS))
+    return mappages(pgdir, va, size,pa, PTE_U | PTE_W);
+
+  if (INCLUDE(m->prot, PROT_WRITE))
+    return mappages(pgdir, va, size, pa, PTE_U | PTE_W);
+  else
+    return mappages(pgdir, va, size,pa, PTE_U);
+}
+
+// fork 때문에 만든 mmap wrapper
+static uint
+_mmap(uint addr, int length, int prot, int flags, int fd, int offset, struct proc *p)
+{
+  if (addr != PGROUNDDOWN(addr))
+    return 0;
+  if (length != PGROUNDDOWN(length))
+    return 0;
+  if (NOT_INCLUDE(flags, MAP_ANONYMOUS) && fd == -1) 
+    return 0; // anonymous가 아닌데 fd가 -1
+  if ((flags & MAP_ANONYMOUS) && (fd != -1))
+    return 0; // anonymous인데 fd가 -1이 아님...
+  if ((flags & MAP_ANONYMOUS) && (offset != 0))
+    return 0; // anonymous인데 offset이 0이 아님...
 
   struct mmap_area *m;
 
   acquire(&mtable.lock);
+  m = find_unused_mmap_area();
+  if (m == (struct mmap_area *)(-1))
+    return 0; // 없을 때.
 
-  for(m = mtable.areas; m < &mtable.areas[NMMAP]; m++)
-    if(!m->is_used)
-      goto found;
-
-  release(&mtable.lock);
-  return 0; // 없을 때.
-  
-found:
 /**
  * TODO
  * - file 불러오기
@@ -463,6 +506,7 @@ found:
  *   - page fault를 발생시키려면 page정보가 있어야된다...
  *   - 뇌피셜로는 walkpgdir에서 page valid가 꺼져있으면 page fault 발생시키는 게 맞지 않을까 싶은데..
 */
+
   m->is_used = 1;
   m->addr = addr;
   m->length = length;
@@ -470,7 +514,7 @@ found:
   m->flags = flags;
   m->fd = fd;
   m->offset = offset;
-  m->p = myproc();
+  m->p = p;
 
   release(&mtable.lock);
 
@@ -484,21 +528,7 @@ found:
   uint base_addr = m->addr + MMAPBASE;
   uint curr_addr;
   char *mem;
-  for (curr_addr = base_addr; curr_addr < PGROUNDUP(base_addr); curr_addr += PGSIZE)
-  {
-    if ((mem = kalloc()) == 0)
-      goto bad;
-    if (flags & MAP_ANONYMOUS)
-      memset(mem, 0, PGSIZE);
-    else
-      fileread(m->f, mem + (curr_addr - PGROUNDDOWN(curr_addr)), (PGROUNDUP(curr_addr) - curr_addr));
-    if (mappages(pgdir, (void *)curr_addr, (PGROUNDUP(curr_addr) - curr_addr), V2P(mem), PTE_W | PTE_U) < 0)
-    {
-      kfree(mem);
-      goto bad;
-    }
-  }
-  for (curr_addr = PGROUNDDOWN(curr_addr); curr_addr < base_addr + length; curr_addr += PGSIZE)
+  for (curr_addr = base_addr; curr_addr < base_addr + length; curr_addr += PGSIZE)
   {
     if ((mem = kalloc()) == 0)
       goto bad;
@@ -506,7 +536,7 @@ found:
       memset(mem, 0, PGSIZE);
     else
       fileread(m->f, mem, PGSIZE);
-    if (mappages(pgdir, (void *)curr_addr, PGSIZE, V2P(mem), PTE_W | PTE_U) < 0)
+    if (_mappages(pgdir, (void *)curr_addr, PGSIZE, V2P(mem), m) < 0)
     {
       kfree(mem);
       goto bad;
@@ -522,12 +552,21 @@ bad:
   m->is_used = 0;
   release(&mtable.lock);
   return 0;
+
+}
+// public
+uint
+mmap(uint addr, int length, int prot, int flags, int fd, int offset)
+{
+  return _mmap(addr, length, prot, flags, fd, offset, myproc());
 }
 
+// TODO: 권한 핸들
 int
 handle_page_fault()
 {
   uint fault_addr = rcr2();
+  // cprintf("fault_addr: %d\n", fault_addr);
 
   struct mmap_area *m;
 
@@ -538,8 +577,9 @@ handle_page_fault()
     if (!m->is_used)
       continue;
     uint base_addr = m->addr + MMAPBASE;
-    if (base_addr <= fault_addr && fault_addr <= base_addr + m->length)
-      goto found;
+    if (m->p == myproc())
+      if (base_addr <= fault_addr && fault_addr < base_addr + m->length)
+        goto found;
   }
   release(&mtable.lock);
   return -1;
@@ -547,8 +587,12 @@ handle_page_fault()
 found:  
   release(&mtable.lock);
 
+  // If fault was read whilte mmap_area is read prohibited.
+  if (NOT_INCLUDE(myproc()->tf->err, 2) && NOT_INCLUDE(m->prot, PROT_READ))
+    return -1;
+
   // If fault was write whilte mmap_area is write prohibited.
-  if (((myproc()->tf->err) & (2)) && (!(m->prot&PROT_WRITE)))
+  if (INCLUDE(myproc()->tf->err, 2) && NOT_INCLUDE(m->prot, PROT_WRITE))
     return -1;
 
   pde_t *pgdir = m->p->pgdir;
@@ -573,6 +617,7 @@ found:
     // 2. fault_addr가 다른 페이지 내에 존재.
     else
     {
+      // offset을 fault_addr's page의 시작주소로 설정함.
       m->f->off = m->offset + (PGROUNDDOWN(fault_addr) - base_addr);
       fileread(m->f, mem, PGSIZE);
     }
@@ -581,13 +626,68 @@ found:
   uint size = PGROUNDUP(fault_addr) - fault_addr;
   if (size == 0)
     size = PGSIZE;
-  if (mappages(pgdir, (void *)fault_addr, size, V2P(mem), PTE_W | PTE_U) < 0)
+  if (_mappages(pgdir, (void *)fault_addr, size, V2P(mem), m) < 0)
   {
     kfree(mem);
     return -1;
   }
 
   return 0;
+}
+
+int
+copymmap(struct proc *np, struct proc *curproc)
+{
+  int cand_length = 0;
+  struct mmap_area *candidates[NMMAP];
+  struct mmap_area *m;
+
+  acquire(&mtable.lock);
+  
+  for (m = mtable.areas; m < &mtable.areas[NMMAP]; m++)
+  {
+    if (!m->is_used)
+      continue;
+    if (m->p == curproc)
+      candidates[cand_length++] = m;
+  }
+
+  release(&mtable.lock);
+
+  for (int i = 0; i < cand_length; i++)
+  {
+    _mmap(candidates[i]->addr, candidates[i]->length, candidates[i]->prot, candidates[i]->flags, candidates[i]->fd, candidates[i]->offset, np);
+    // TODO: anonymous이고, MAP_POPULATE일 때 write가 발생하면? <- write는 test를 안함.
+
+    // populate가 아닐 때 부모에게서 page들 복사해줘야함.
+    if (NOT_INCLUDE(candidates[i]->flags, MAP_POPULATE))
+    {
+      pte_t *pte;
+      uint pa, curr_addr, flags;
+      uint base_addr = candidates[i]->addr + MMAPBASE;
+      char *mem;
+      for (curr_addr = base_addr; curr_addr < base_addr + candidates[i]->length; curr_addr += PGSIZE)
+      {
+        if ((pte = walkpgdir(candidates[i]->p->pgdir, (void *)curr_addr, 0)) == 0)
+          continue;
+        if (!(*pte & PTE_P))
+          continue;
+
+        pa = PTE_ADDR(*pte); 
+        flags = PTE_FLAGS(*pte);
+        if ((mem = kalloc()) == 0)
+          return -1;
+        memmove(mem, (char *)P2V(pa), PGSIZE);
+        if (mappages(np->pgdir, (void *)curr_addr, PGSIZE, V2P(mem), flags) < 0)
+        {
+          kfree(mem);
+          return -1;
+        }
+      }
+    }
+  }
+
+  return 1;  
 }
 
 int
@@ -601,13 +701,17 @@ munmap(uint addr)
 {
   struct mmap_area *m; 
 
+  // when addr is not page aligned
+  if (addr != PGROUNDDOWN(addr))
+    return 0;
+
   acquire(&mtable.lock);
   
   for (m = mtable.areas; m < &mtable.areas[NMMAP]; m++)
   {
     if (!m->is_used)
       continue;
-    if (m->addr+MMAPBASE == addr)
+    if ((myproc() == m->p) && (m->addr+MMAPBASE == addr))
       goto found;
   }
 
@@ -644,6 +748,11 @@ found:
   }
 
   // TODO: page table 청소
+  // if (m->p->pgdir[PDX(a)] & PTE_P)
+  // {
+  //   char *v = P2V(PTE_ADDR(m->p->pgdir[PDX(a)]));
+  //   kfree(v);
+  // }
   acquire(&mtable.lock);
 
   m->is_used = 0;

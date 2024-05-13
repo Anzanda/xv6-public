@@ -192,6 +192,7 @@ void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 uint            mmap(uint, int, int, int, int, int);
+int             copymmap(struct proc*, struct proc*);
 int             handle_page_fault();
 int             freemem(void);
 int             munmap(uint);
